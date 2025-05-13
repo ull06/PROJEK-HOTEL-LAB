@@ -370,7 +370,7 @@ void tambahTamuKeAntreanCheckIn(CheckInList *queue, TamuPtr tamu)
         queue->rear = newNode;
     }
 }
-/ fungsi untuk proses check in
+// fungsi untuk proses check in
 void checkInTamu(HotelData *hotel)
 {
     if (hotel->antreanCheckIn.front == NULL)
@@ -500,3 +500,320 @@ void cekWaitingListSetelahCheckOut(HotelData *hotel, int noKamar)
     }
 }
 
+// fungsi untuk proses check out
+void checkOutTamu(HotelData *hotel)
+{
+    if (hotel->tamuAktif.front == NULL)
+    {
+        printf("\nTidak ada tamu yang sedang menginap.\n");
+        return;
+    }
+
+    // Ambil tamu dari antrean tamuAktif (dequeue)
+    CheckInPtr tamuNode = hotel->tamuAktif.front;
+    TamuPtr tamu = tamuNode->tamu;
+    hotel->tamuAktif.front = tamuNode->next;
+    if (hotel->tamuAktif.front == NULL)
+        hotel->tamuAktif.rear = NULL;
+
+    // Tandai tamu telah check-out
+    tamu->statusPemesanan = 2;
+
+    // Tandai kamar sebagai kosong
+    int hashIndex = hashFunc(tamu->noKamar);
+    KamarNodePtrt kamarNode = hotel->hashKamar.table[hashIndex];
+    int ditemukan = 0;
+    while (kamarNode != NULL)
+    {
+        if (kamarNode->data.noKamar == tamu->noKamar)
+        {
+            kamarNode->data.status = 0; // Kamar jadi kosong
+            ditemukan = 1;
+            break;
+        }
+        kamarNode = kamarNode->next;
+    }
+    if (!ditemukan)
+    {
+        printf("Peringatan: Kamar nomor %d tidak ditemukan di sistem\n", tamu->noKamar);
+    }
+
+    // cek apakah ada tamu di waiting list untuk kamar ini
+    cekWaitingListSetelahCheckOut(hotel, tamu->noKamar);
+
+    // Masukkan tamu ke riwayat check-out
+    CheckOutPtr riwayatBaru = malloc(sizeof(RiwayatCheckOut));
+    if (!riwayatBaru)
+    {
+        printf("Gagal alokasi memori untuk riwayat check-out.\n");
+        return;
+    }
+    riwayatBaru->tamu = tamu;
+    riwayatBaru->next = NULL;
+
+    // masukkan ke dalam queue riwayatCheckOut
+    if (hotel->riwayatCheckOut.rear == NULL)
+    {
+        hotel->riwayatCheckOut.front = hotel->riwayatCheckOut.rear = riwayatBaru;
+    }
+    else
+    {
+        hotel->riwayatCheckOut.rear->next = riwayatBaru;
+        hotel->riwayatCheckOut.rear = riwayatBaru;
+    }
+
+    // Menampilkan pesan berhasil check-out
+    printf("\nTamu '%s' dengan kamar %d telah berhasil check-out.\n", tamu->namaTamu, tamu->noKamar);
+
+    free(tamuNode); // Hapus node dari antrean tamuAktif
+}
+
+// fungsi memasukkan data kamar awal ke hash table
+void insertKamarToHash(HotelData *hotel, int noKamar, char *tipeKamar, int harga, char *fasilitas)
+{
+    int hashIndex = hashFunc(noKamar);
+
+    // Cek apakah kamar sudah ada di hash table
+    KamarNodePtrt current = hotel->hashKamar.table[hashIndex];
+    while (current != NULL)
+    {
+        if (current->data.noKamar == noKamar)
+        {
+            printf("Kamar dengan nomor %d sudah ada!\n", noKamar);
+            return;
+        }
+        current = current->next;
+    }
+
+    // Buat node kamar baru
+    KamarNodePtrt newNode = malloc(sizeof(KamarNode));
+    if (!newNode)
+    {
+        printf("Gagal alokasi memori!\n");
+        return;
+    }
+
+    // Set data kamar
+    newNode->data.noKamar = noKamar;
+    newNode->data.harga = harga;
+    strcpy(newNode->data.tipeKamar, tipeKamar);
+    strcpy(newNode->data.fasilitas, fasilitas);
+    newNode->data.status = 0; // otomatis "kosong"
+
+    // Masukkan kamar baru ke dalam hash table
+    newNode->next = hotel->hashKamar.table[hashIndex];
+    hotel->hashKamar.table[hashIndex] = newNode;
+}
+
+// fungsi tambah kamar
+void tambahKamar(HotelData *hotel)
+{
+    // cek kapasitas kamar
+    if (hitungTotalKamar(&hotel->hashKamar) >= MAX_KAMAR)
+    {
+        printf("Maaf, kamar hotel sudah penuh!\n");
+        return;
+    }
+
+    int nomor;
+    printf("\n=== Tambah Kamar ===\n");
+    printf("Nomor Kamar: ");
+    scanf("%d", &nomor);
+    while (getchar() != '\n')
+        ;
+
+    // Cek apakah kamar sudah ada di hash table
+    int hashIndex = hashFunc(nomor);
+    KamarNodePtrt current = hotel->hashKamar.table[hashIndex];
+    while (current != NULL)
+    {
+        if (current->data.noKamar == nomor)
+        {
+            printf("Nomor kamar '%d' sudah terdaftar!\n", nomor);
+            return;
+        }
+        current = current->next;
+    }
+
+    // jika nomor kamar belum ada, buat kamar baru
+    Kamar kamarBaru;
+    kamarBaru.noKamar = nomor;
+
+    // getchar(); //bersihkan newline setelah scanf
+
+    printf("Tipe kamar: ");
+    fgets(kamarBaru.tipeKamar, sizeof(kamarBaru.tipeKamar), stdin);
+    kamarBaru.tipeKamar[strcspn(kamarBaru.tipeKamar, "\n")] = '\0';
+
+    printf("Harga: ");
+    scanf("%d", &kamarBaru.harga);
+    while (getchar() != '\n')
+        ;
+
+    printf("Fasilitas: ");
+    fgets(kamarBaru.fasilitas, sizeof(kamarBaru.fasilitas), stdin);
+    kamarBaru.fasilitas[strcspn(kamarBaru.fasilitas, "\n")] = '\0';
+
+    kamarBaru.status = 0; // kosong
+
+    // Memasukkan kamar ke dalam hash table
+    KamarNodePtrt newNode = malloc(sizeof(KamarNode));
+    if (newNode == NULL)
+    {
+        printf("Gagal mengalokasikan memori untuk kamar baru!\n");
+        return;
+    }
+    newNode->data = kamarBaru;
+    newNode->next = hotel->hashKamar.table[hashIndex];
+    hotel->hashKamar.table[hashIndex] = newNode;
+
+    printf("Kamar berhasil ditambahkan.\n");
+}
+
+void updateHarga(HotelData *hotel)
+{
+
+    int nomor, hargaBaru;
+    printf("\n=== Update Harga Kamar ===\n");
+    printf("Masukkan nomor kamar: ");
+    scanf("%d", &nomor);
+    printf("Masukkan harga baru: ");
+    scanf("%d", &hargaBaru);
+    getchar();
+
+    // cek harga baru agar tidak negatif
+    if (hargaBaru < 0)
+    {
+        printf("Harga tidak boleh negatif!\n");
+        return;
+    }
+
+    // Menggunakan hash table untuk mencari kamar berdasarkan nomor kamar
+    int hashIndex = hashFunc(nomor);                           // Menghitung index berdasarkan nomor kamar
+    KamarNodePtrt current = hotel->hashKamar.table[hashIndex]; // Mengakses bucket hash sesuai index
+
+    if (current == NULL)
+    {
+        // Jika bucket kosong, berarti kamar dengan nomor tersebut belum ada
+        printf("Kamar dengan nomor %d tidak ditemukan.\n", nomor);
+        return;
+    }
+
+    // Mencari kamar dengan nomor yang sesuai dalam linked list di dalam bucket
+    while (current != NULL)
+    {
+        if (current->data.noKamar == nomor)
+        {
+            current->data.harga = hargaBaru; // Update harga
+            printf("Harga kamar nomor %d berhasil diperbaharui.\n", nomor);
+            return;
+        }
+        current = current->next; // Lanjutkan ke node berikutnya jika belum ditemukan
+    }
+
+    // Jika nomor kamar tidak ditemukan dalam linked list
+    printf("Kamar dengan nomor %d tidak ditemukan.\n", nomor);
+}
+
+// fungsi untuk update fasilitas kamar
+void updateFasilitas(HotelData *hotel)
+{
+    int nomor;
+    char fasilitasBaru[100];
+    printf("\n=== Update Fasilitas Kamar ===\n");
+    printf("Masukkan nomor kamar: ");
+    scanf("%d", &nomor);
+    getchar();
+
+    printf("Masukkan fasilitas baru: ");
+    fgets(fasilitasBaru, sizeof(fasilitasBaru), stdin);
+    fasilitasBaru[strcspn(fasilitasBaru, "\n")] = '\0'; // hapus newline
+
+    // Menggunakan hash table untuk mencari kamar berdasarkan nomor kamar
+    int hashIndex = hashFunc(nomor);
+    KamarNodePtrt current = hotel->hashKamar.table[hashIndex];
+    while (current != NULL)
+    {
+        if (current->data.noKamar == nomor)
+        {
+            strcpy(current->data.fasilitas, fasilitasBaru);
+            printf("Fasilitas kamar nomor %d berhasil diperbaharui.\n", nomor);
+            return;
+        }
+        current = current->next;
+    }
+
+    printf("Kamar dengan nomor %d tidak ditemukan.\n", nomor);
+}
+
+// fungsi untuk update tipe kamar
+void updateTipeKamar(HotelData *hotel)
+{
+    int nomor;
+    char tipeBaru[100]; // ini lebih aman daripada lngusng akses memori utama penyimpanan
+    printf("\n=== Update Tipe Kamar ===\n");
+    printf("Masukkan nomor kamar: ");
+    scanf("%d", &nomor);
+    getchar();
+
+    printf("Masukkan tipe kamar baru: ");
+    fgets(tipeBaru, sizeof(tipeBaru), stdin);
+    tipeBaru[strcspn(tipeBaru, "\n")] = '\0';
+
+    // Menggunakan hash table untuk mencari kamar berdasarkan nomor kamar
+    int hashIndex = hashFunc(nomor);
+    KamarNodePtrt current = hotel->hashKamar.table[hashIndex];
+    while (current != NULL)
+    {
+        if (current->data.noKamar == nomor)
+        {
+            strcpy(current->data.tipeKamar, tipeBaru);
+            printf("Tipe kamar nomor %d berhasil diperbaharui.\n", nomor);
+            return;
+        }
+        current = current->next;
+    }
+
+    printf("Kamar dengan nomor %d tidak ditemukan.\n", nomor);
+}
+
+// fungsi untuk menampilkan daftar kamar
+void tampilkanKamar(const HotelData *hotel)
+{
+
+    printf("\n========================= Daftar Kamar ========================================\n");
+
+    // Hitung jumlah kamar menggunakan hash table
+    int total = hitungTotalKamar(&hotel->hashKamar);
+    printf("Jumlah Kamar: %d\n", total);
+
+    printf("+------------+------------+------------+----------------------+-----------------+\n");
+    printf("| %-10s | %-10s | %-10s | %-20s | %-15s |\n",
+           "No.Kamar", "Tipe Kamar", "Harga", "Fasilitas", "Status");
+    printf("+------------+------------+------------+----------------------+-----------------+\n");
+    // cek apakah sudah ada kamar
+    if (total == 0)
+    {
+        printf("| %-10d | %-10s | %-10d | %-20s | %-15s |\n", 0, "-", 0, "-", "-");
+        printf("+-----------------------------------------------------------------------+\n");
+        printf("Belum ada kamar yang ditambahkan.\n");
+        return;
+    }
+
+    // Telusuri semua indeks di hash table
+    for (int i = 0; i < HASH_SIZE; i++)
+    {
+        KamarNodePtrt current = hotel->hashKamar.table[i];
+        while (current != NULL)
+        {
+            Kamar k = current->data;
+            printf("| %-10d | %-10s | %-10d | %-20s | %-15s |\n",
+                   k.noKamar, k.tipeKamar, k.harga, k.fasilitas,
+                   (k.status == 0) ? "Kosong" : "Terisi");
+
+            current = current->next;
+        }
+    }
+
+    printf("+===============================================================================+\n");
+}
