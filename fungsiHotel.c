@@ -441,4 +441,62 @@ void checkInTamu(HotelData *hotel)
     printf("\nTamu '%s' telah berhasil check-in ke kamar %d.\n", tamu->namaTamu, tamu->noKamar);
     free(checkInNode); // hapus node antrean check-in
 }
+// fungsi untuk mengecek waiting list saat kamar baru kosong (check out)
+void cekWaitingListSetelahCheckOut(HotelData *hotel, int noKamar)
+{
+    WaitingListPtr current = hotel->antreanWaitingList.front;
+    WaitingListPtr prev = NULL;
+
+    while (current != NULL)
+    {
+        if (current->tamu->noKamar == noKamar)
+        {
+            // Tamu ini sedang menunggu kamar yang baru kosong
+            TamuPtr tamuSiapMasuk = current->tamu;
+
+            // Hapus dari antrean waiting list
+            if (prev == NULL)
+            {
+                hotel->antreanWaitingList.front = current->next;
+            }
+            else
+            {
+                prev->next = current->next;
+            }
+
+            if (current == hotel->antreanWaitingList.rear)
+            {
+                hotel->antreanWaitingList.rear = prev;
+            }
+
+            free(current);
+
+            printf("\nKamar %d kini kosong. Tamu '%s' dari waiting list diproses.\n",
+                   noKamar, tamuSiapMasuk->namaTamu);
+
+            // Masukkan ke antrean check-in
+            tambahTamuKeAntreanCheckIn(&hotel->antreanCheckIn, tamuSiapMasuk);
+
+            // Update status kamar
+            int idx = hashFunc(noKamar);
+            KamarNodePtrt node = hotel->hashKamar.table[idx];
+            while (node != NULL)
+            {
+                if (node->data.noKamar == noKamar)
+                {
+                    node->data.status = 1;
+                    break;
+                }
+                node = node->next;
+            }
+
+            printf("%s' telah dipindahkan ke antrean check-in untuk kamar %d.\n",
+                   tamuSiapMasuk->namaTamu, noKamar);
+            return; // hanya ambil satu tamu dari waiting list
+        }
+
+        prev = current;
+        current = current->next;
+    }
+}
 
